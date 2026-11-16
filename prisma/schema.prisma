@@ -1,0 +1,86 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Optional: a direct (non-pooled) connection for migrations on serverless Postgres.
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  githubId  String   @unique
+  name      String?
+  email     String?
+  // GitHub OAuth access token, AES-256-GCM encrypted (see src/lib/crypto.ts).
+  // Never stored or logged in plaintext.
+  encryptedAccessToken String?
+  createdAt DateTime @default(now())
+
+  repositories Repository[]
+  audits       Audit[]
+}
+
+model Repository {
+  id            String   @id @default(cuid())
+  userId        String
+  githubRepoId  String
+  name          String // "owner/repo"
+  defaultBranch String
+  createdAt     DateTime @default(now())
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  audits Audit[]
+
+  @@unique([userId, githubRepoId])
+}
+
+model Audit {
+  id                String   @id @default(cuid())
+  userId            String
+  repositoryId      String
+  task              String // one-line task objective derived from the prompt
+  prompt            String // full prompt as submitted (detected secrets redacted)
+  includePatterns   String[]
+  excludePatterns   String[]
+  tokenBudget       Int
+  estimatedTokens   Int // prompt + every file matched by the patterns
+  recommendedTokens Int // generated pack + recommended files
+  createdAt         DateTime @default(now())
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  repository  Repository   @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  findings    Finding[]
+  contextPack ContextPack?
+
+  @@index([userId, createdAt])
+}
+
+model Finding {
+  id                   String  @id @default(cuid())
+  auditId              String
+  ruleId               String
+  severity             String // "high" | "medium" | "low"
+  filePath             String? // null for prompt-level findings
+  explanation          String
+  suggestedAction      String
+  estimatedTokensSaved Int
+
+  audit Audit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  @@index([auditId])
+}
+
+model ContextPack {
+  id              String   @id @default(cuid())
+  auditId         String   @unique
+  markdown        String
+  selectedFiles   Json // [{ path, tokens }]
+  excludedFiles   Json // [{ path, tokens, reason }]
+  estimatedTokens Int
+  createdAt       DateTime @default(now())
+
+  audit Audit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+}
