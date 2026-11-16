@@ -13,7 +13,7 @@ export function estimateTokens(text: string): number {
     const first = segment.charCodeAt(0);
     if ((first >= 65 && first <= 90) || (first >= 97 && first <= 122)) {
       // Words: short words are one token, long identifiers split into pieces.
-      tokens += Math.ceil(segment.length / 5);
+      tokens += Math.ceil(segment.length / 6);
     } else if (first >= 48 && first <= 57) {
       tokens += Math.ceil(segment.length / 3);
     } else if (/\s/.test(segment[0])) {
@@ -21,7 +21,7 @@ export function estimateTokens(text: string): number {
       // indentation runs cost tokens.
       const newlines = segment.split("\n").length - 1;
       const indent = segment.length - newlines;
-      tokens += newlines + (indent > 1 ? Math.ceil(indent / 8) : 0);
+      tokens += newlines + Math.floor(indent / 8);
     } else {
       // Punctuation, symbols, CJK and other non-ASCII characters.
       tokens += 1;

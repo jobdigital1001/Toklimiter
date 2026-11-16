@@ -25,6 +25,7 @@ const patternListSchema = z.array(patternSchema).max(50);
 export const promptSchema = z
   .string()
   .max(MAX_PROMPT_CHARS, `Prompt must be at most ${MAX_PROMPT_CHARS.toLocaleString("en-US")} characters`)
+  .transform((value) => value.replace(/\u0000/g, ""))
   .refine((value) => value.trim().length > 0, "Enter a task prompt");
 
 export const auditRequestSchema = z.strictObject({
