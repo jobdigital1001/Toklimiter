@@ -1,0 +1,413 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  CANDIDATE
+  RECRUITER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum ProfileVisibility {
+  PUBLIC
+  RECRUITERS
+  PRIVATE
+}
+
+enum WorkArrangement {
+  REMOTE
+  HYBRID
+  ONSITE
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERNSHIP
+  TEMPORARY
+}
+
+enum ExperienceLevel {
+  ENTRY
+  MID
+  SENIOR
+  LEAD
+  EXECUTIVE
+}
+
+enum JobStatus {
+  DRAFT
+  PUBLISHED
+  PAUSED
+  CLOSED
+}
+
+enum ApplicationStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  INTERVIEW
+  OFFER
+  REJECTED
+  WITHDRAWN
+}
+
+enum AlertFrequency {
+  DAILY
+  WEEKLY
+}
+
+enum ReportStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
+// ───────────── Auth.js ─────────────
+
+model User {
+  id            String     @id @default(cuid())
+  name          String?
+  email         String     @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String?
+  role          Role       @default(CANDIDATE)
+  status        UserStatus @default(ACTIVE)
+  /// Set once the user has confirmed their account type (OAuth users pick it after first sign-in).
+  onboardedAt   DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  accounts     Account[]
+  sessions     Session[]
+  profile      CandidateProfile?
+  company      Company?          @relation("CompanyMembers", fields: [companyId], references: [id], onDelete: SetNull)
+  companyId    String?
+  applications Application[]
+  savedJobs    SavedJob[]
+  alerts       JobAlert[]
+  notes        ApplicationNote[]
+  reports      Report[]
+  postedJobs   Job[]
+
+  @@index([role])
+  @@index([companyId])
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+}
+
+// ───────────── Candidates ─────────────
+
+model CandidateProfile {
+  id           String            @id @default(cuid())
+  userId       String            @unique
+  headline     String?
+  location     String?
+  bio          String?
+  phone        String?
+  skills       String[]
+  portfolioUrl String?
+  linkedinUrl  String?
+  githubUrl    String?
+  cvKey        String?
+  cvFileName   String?
+  visibility   ProfileVisibility @default(RECRUITERS)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  experiences Experience[]
+  educations  Education[]
+}
+
+model Experience {
+  id          String    @id @default(cuid())
+  profileId   String
+  title       String
+  company     String
+  location    String?
+  startDate   DateTime
+  endDate     DateTime?
+  description String?
+
+  profile CandidateProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+}
+
+model Education {
+  id        String @id @default(cuid())
+  profileId String
+  school    String
+  degree    String
+  field     String?
+  startYear Int
+  endYear   Int?
+
+  profile CandidateProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+}
+
+// ───────────── Companies & jobs ─────────────
+
+model Company {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  tagline     String?
+  description String
+  logoUrl     String?
+  bannerUrl   String?
+  website     String?
+  location    String
+  industry    String
+  size        String
+  culture     String?
+  highlights  String[]
+  linkedinUrl String?
+  twitterUrl  String?
+  githubUrl   String?
+  verified    Boolean  @default(false)
+  suspended   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members   User[]        @relation("CompanyMembers")
+  jobs      Job[]
+  templates JobTemplate[]
+
+  @@index([industry])
+  @@index([name])
+}
+
+model Category {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String   @unique
+  description String?
+  icon        String   @default("briefcase")
+  createdAt   DateTime @default(now())
+
+  jobs      Job[]
+  templates JobTemplate[]
+  alerts    JobAlert[]
+}
+
+model Job {
+  id                 String          @id @default(cuid())
+  slug               String          @unique
+  title              String
+  companyId          String
+  categoryId         String
+  postedById         String?
+  location           String
+  arrangement        WorkArrangement
+  employmentType     EmploymentType
+  experienceLevel    ExperienceLevel
+  salaryMin          Int?
+  salaryMax          Int?
+  currency           String          @default("USD")
+  description        String
+  responsibilities   String[]
+  requirements       String[]
+  benefits           String[]
+  skills             String[]
+  screeningQuestions String[]
+  status             JobStatus       @default(DRAFT)
+  featured           Boolean         @default(false)
+  deadline           DateTime?
+  publishedAt        DateTime?
+  views              Int             @default(0)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  category     Category      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  postedBy     User?         @relation(fields: [postedById], references: [id], onDelete: SetNull)
+  applications Application[]
+  savedBy      SavedJob[]
+  reports      Report[]
+
+  @@index([status, publishedAt])
+  @@index([companyId])
+  @@index([categoryId])
+  @@index([arrangement, employmentType, experienceLevel])
+}
+
+model JobTemplate {
+  id                 String           @id @default(cuid())
+  name               String
+  /// System templates are managed by admins and visible to every recruiter.
+  isSystem           Boolean          @default(false)
+  companyId          String?
+  title              String
+  categoryId         String?
+  employmentType     EmploymentType?
+  arrangement        WorkArrangement?
+  description        String
+  responsibilities   String[]
+  requirements       String[]
+  benefits           String[]
+  skills             String[]
+  screeningQuestions String[]
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  company  Company?  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+}
+
+// ───────────── Applications ─────────────
+
+model Application {
+  id          String            @id @default(cuid())
+  jobId       String
+  userId      String
+  fullName    String
+  email       String
+  phone       String
+  linkUrl     String?
+  coverLetter String?
+  cvKey       String?
+  cvFileName  String?
+  /// Array of { question, answer } captured at submission time.
+  answers     Json              @default("[]")
+  status      ApplicationStatus @default(SUBMITTED)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  job   Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  user  User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notes ApplicationNote[]
+
+  @@unique([jobId, userId])
+  @@index([userId])
+  @@index([jobId, status])
+}
+
+model ApplicationNote {
+  id            String   @id @default(cuid())
+  applicationId String
+  authorId      String?
+  body          String
+  createdAt     DateTime @default(now())
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  author      User?       @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([applicationId])
+}
+
+model SavedJob {
+  userId    String
+  jobId     String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job  Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@id([userId, jobId])
+}
+
+model JobAlert {
+  id              String           @id @default(cuid())
+  userId          String
+  name            String
+  q               String?
+  location        String?
+  categoryId      String?
+  arrangement     WorkArrangement?
+  employmentType  EmploymentType?
+  experienceLevel ExperienceLevel?
+  salaryMin       Int?
+  frequency       AlertFrequency   @default(WEEKLY)
+  active          Boolean          @default(true)
+  lastSentAt      DateTime?
+  createdAt       DateTime         @default(now())
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([active, frequency])
+}
+
+// ───────────── Platform ─────────────
+
+model Report {
+  id         String       @id @default(cuid())
+  jobId      String
+  reporterId String?
+  reason     String
+  details    String?
+  status     ReportStatus @default(OPEN)
+  createdAt  DateTime     @default(now())
+  resolvedAt DateTime?
+
+  job      Job   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  reporter User? @relation(fields: [reporterId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+}
+
+model NewsletterSubscriber {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  createdAt DateTime @default(now())
+}
+
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
